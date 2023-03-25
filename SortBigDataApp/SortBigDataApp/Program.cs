@@ -1,252 +1,151 @@
-﻿using System.IO;
-using static System.Net.Mime.MediaTypeNames;
+﻿using Microsoft.Extensions.Configuration;
+using SortBigDataApp;
+using System.Diagnostics;
 
-namespace SortBigDataApp
+internal class Program
 {
-    internal class Program
+    const string startTreeDirectory = "tree";
+    const string outputFileName = "output.txt";
+    static string tempTreeDirectory = "tempTree";
+
+    static bool FirstLevelSortAsc = true;
+    static bool SecondLevelSortAsc = true;
+
+    static void Main(string[] args)
     {
-        static void Main(string[] args)
+        IConfiguration Configuration = new ConfigurationBuilder()
+            .AddJsonFile("appsettings.json")
+            .Build();
+
+        var inputFileName = Configuration["Settings:InputFileName"];
+        var rootDirectory = Path.GetDirectoryName(inputFileName);
+        tempTreeDirectory = Path.Combine(rootDirectory, tempTreeDirectory);
+
+        FirstLevelSortAsc = bool.Parse(Configuration["Settings:FirstLevelSortAsc"]);
+        Func<string, string, bool> compareStringValues = FirstLevelSortAsc ? CompareStringValues : (a, b) => !CompareStringValues(a, b);
+
+        SecondLevelSortAsc = bool.Parse(Configuration["Settings:SecondLevelSortAsc"]);
+
+        var sw = Stopwatch.StartNew();
+        Console.WriteLine("First tree building...");
+        var quickSort = new QuickSort<string>(inputFileName, GetStringPivotItem, compareStringValues, startTreeDirectory);
+        quickSort.Sort();
+        sw.Stop();
+        Console.WriteLine($"First tree is built for {sw.Elapsed}");
+
+        sw.Restart();
+        WriteOutput(rootDirectory);
+        sw.Stop();
+        Console.WriteLine($"Output generated for {sw.Elapsed}");
+    }
+
+    static string GetStringPivotItem(string line)
+    {
+        return Parse(line)[1];
+    }
+
+    static int GetIntPivotItem(string line)
+    {
+        return int.Parse(Parse(line)[0]);
+    }
+
+    static bool CompareStringValues(string line, string pivotItem)
+    {
+        var parsedA = Parse(line);
+        return string.Compare(parsedA[1], pivotItem) <= 0;
+    }
+
+    static bool CompareIntValues(string a, int pivotItem)
+    {
+        var parsedA = Parse(a);
+        return int.Parse(parsedA[0]) <= pivotItem;
+    }
+
+    static void WriteOutput(string outputDirectory)
+    {
+        using var context = new TraverseTreeContext(outputDirectory, outputFileName, startTreeDirectory);
+
+        GoThroughTreeWithTempWriter(context, context.TreeDirectory);
+
+        context.DisposeTempStream();
+
+        Func<string, int, bool> compareIntValues = SecondLevelSortAsc ? CompareIntValues : (a, b) => !CompareIntValues(a, b);
+
+        var quickSort = new QuickSort<int>(context.TempFileName, GetIntPivotItem, compareIntValues, tempTreeDirectory);
+        quickSort.Sort();
+
+        SimpleGoThroughTree(context.OutputWriter, tempTreeDirectory);
+    }
+
+    static void SimpleGoThroughTree(StreamWriter writer, string currentDirectory)
+    {
+        var leftDirectory = Path.Combine(currentDirectory, "l");
+        if (Directory.Exists(leftDirectory))
         {
-            // todo: put in config
-            string fileName = @"input.txt";
-
-            // todo: clean all prev results
-
-            var outputDirectory = "output";
-
-            DoSortIteration(fileName, outputDirectory);
-
-            WriteOutput(outputDirectory);
+            SimpleGoThroughTree(writer, leftDirectory);
         }
 
-        static void WriteOutput(string startDirectory)
+        var valueFile = Path.Combine(currentDirectory, "v");
+        if (File.Exists(valueFile))
         {
-            var outputFileName = "output.txt";
-            if (File.Exists(outputFileName))
-            {
-                File.Delete(outputFileName);
-            }
-
-            using (FileStream stream = new FileStream(outputFileName, FileMode.OpenOrCreate))
-            {
-                using (StreamWriter writer = new StreamWriter(stream))
-                {
-                    var context = new TraverseTreeContext("tempOutput.txt");
-                    context.InitTempStream();
-                    context.Writer = writer;
-
-                    GoThroughTreeWithTempWriter(context, startDirectory);
-
-                    context.DisposeTempStream();
-                    DoSortIteration(context.TempFileName, "tempOutput");
-                    SimpleGoThroughTree(context.Writer, "tempOutput");
-                }
-            }
+            writer.WriteLine(File.ReadAllText(valueFile));
         }
 
-        static void SimpleGoThroughTree(StreamWriter writer, string currentDirectory)
+        var rightDirectory = Path.Combine(currentDirectory, "r");
+        if (Directory.Exists(rightDirectory))
         {
-            var leftDirectory = Path.Combine(currentDirectory, "l");
-            if (Directory.Exists(leftDirectory))
-            {
-                SimpleGoThroughTree(writer, leftDirectory);
-            }
-
-            var valueFile = Path.Combine(currentDirectory, "v.txt");
-            if (File.Exists(valueFile))
-            {
-                writer.WriteLine(File.ReadAllText(valueFile));
-            }
-
-            var rightDirectory = Path.Combine(currentDirectory, "r");
-            if (Directory.Exists(rightDirectory))
-            {
-                SimpleGoThroughTree(writer, rightDirectory);
-            }
-        }
-
-        static void GoThroughTreeWithTempWriter(TraverseTreeContext context, string currentDirectory)
-        {
-            var leftDirectory = Path.Combine(currentDirectory, "l");
-            if (Directory.Exists(leftDirectory))
-            {
-                GoThroughTreeWithTempWriter(context, leftDirectory);
-            }
-
-            var valueFile = Path.Combine(currentDirectory, "v.txt");
-            if (File.Exists(valueFile))
-            {
-                var value = File.ReadAllText(valueFile);
-
-                if (context.PrevValue == null)
-                {
-                    context.PrevValue = value;
-                }
-
-                if (context.PrevValue != value)
-                {
-                    // sort and write temp
-                    context.DisposeTempStream();
-
-                    DoSortIteration(context.TempFileName, "tempOutput");
-                    SimpleGoThroughTree(context.Writer, "tempOutput");
-                    // clear temp
-                    context.InitTempStream();
-                    // update prevValue
-                    context.PrevValue = value;
-                }
-
-                context.TempWriter.WriteLine(value);
-            }
-
-            var rightDirectory = Path.Combine(currentDirectory, "r");
-            if (Directory.Exists(rightDirectory))
-            {
-                GoThroughTreeWithTempWriter(context, rightDirectory);
-            }
-        }
-
-        static void DoSortIteration(string fileName, string startDirectory = null)
-        {
-            string leftFileName, rightFileName;
-
-            if (!File.Exists(fileName))
-            {
-                Console.WriteLine($"File does not exist: {fileName}");
-                return;
-            }
-
-            using (StreamReader reader = new StreamReader(fileName))
-            {
-                var line = reader.ReadLine();
-
-                if (line == null)
-                {
-                    Console.WriteLine($"File is empty: {fileName}");
-                    return;
-                }
-
-                var pivotItem = line;
-
-                var currentDirectory = Path.GetDirectoryName(fileName);
-                if (startDirectory != null)
-                {
-                    currentDirectory = Path.Combine(currentDirectory, startDirectory);
-
-                    if (Directory.Exists(currentDirectory))
-                    {
-                        Directory.Delete(currentDirectory, true);
-                    }
-
-                    Directory.CreateDirectory(currentDirectory);
-                }
-
-                File.WriteAllText(Path.Combine(currentDirectory, "v.txt"), line);
-
-                line = reader.ReadLine();
-
-                if (line == null)
-                {
-                    return;
-                }
-
-                var leftDirectory = Path.Combine(currentDirectory, "l");
-                var rightDirectory = Path.Combine(currentDirectory, "r");
-
-                leftFileName = Path.Combine(leftDirectory, "s.txt");
-                rightFileName = Path.Combine(rightDirectory, "s.txt");
-
-                if (!Directory.Exists(leftDirectory))
-                {
-                    Directory.CreateDirectory(leftDirectory);
-                }
-
-                if (!Directory.Exists(rightDirectory))
-                {
-                    Directory.CreateDirectory(rightDirectory);
-                }
-
-                using (FileStream leftStream = new FileStream(leftFileName, FileMode.OpenOrCreate))
-                {
-                    using (StreamWriter leftWriter = new StreamWriter(leftStream))
-                    {
-                        using (FileStream rightStream = new FileStream(rightFileName, FileMode.OpenOrCreate))
-                        {
-                            using (StreamWriter rightWriter = new StreamWriter(rightStream))
-                            {
-                                do
-                                {
-                                    if (string.Compare(line, pivotItem) <= 0)
-                                    {
-                                        leftWriter.WriteLine(line);
-                                    }
-                                    else
-                                    {
-                                        rightWriter.WriteLine(line);
-                                    }
-                                } while ((line = reader.ReadLine()) != null);
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (startDirectory == null)
-            {
-                File.Delete(fileName);
-            }
-
-            if (leftFileName != null)
-            {
-                DoSortIteration(leftFileName);
-            }
-
-            if (rightFileName != null)
-            {
-                DoSortIteration(rightFileName);
-            }
+            SimpleGoThroughTree(writer, rightDirectory);
         }
     }
 
-    public class TraverseTreeContext : IDisposable
+
+    static void GoThroughTreeWithTempWriter(TraverseTreeContext context, string currentTreeDirectory)
     {
-        public TraverseTreeContext(string tempFileName)
+        var leftDirectory = Path.Combine(currentTreeDirectory, "l");
+        if (Directory.Exists(leftDirectory))
         {
-            TempFileName = tempFileName;
+            GoThroughTreeWithTempWriter(context, leftDirectory);
         }
 
-        public void InitTempStream()
+        var valueFile = Path.Combine(currentTreeDirectory, "v");
+        if (File.Exists(valueFile))
         {
-            if (File.Exists(TempFileName))
+            var value = File.ReadAllText(valueFile);
+            var stringValue = Parse(value)[1];
+
+            if (context.PrevValue == null)
             {
-                File.Delete(TempFileName);
+                context.PrevValue = stringValue;
             }
 
-            TempFileStream = new FileStream(TempFileName, FileMode.OpenOrCreate);
-            TempWriter = new StreamWriter(TempFileStream);
+            if (context.PrevValue != stringValue)
+            {
+                // sort and write temp
+                context.DisposeTempStream();
+
+                Func<string, int, bool> compareIntValues = SecondLevelSortAsc ? CompareIntValues : (a, b) => !CompareIntValues(a, b);
+                var quickSort = new QuickSort<int>(context.TempFileName, GetIntPivotItem, compareIntValues, tempTreeDirectory);
+                quickSort.Sort();
+
+                SimpleGoThroughTree(context.OutputWriter, tempTreeDirectory);
+                // clear temp
+                context.InitTempStream();
+                // update prevValue
+                context.PrevValue = stringValue;
+            }
+
+            context.TempWriter.WriteLine(value);
         }
 
-        public void DisposeTempStream()
+        var rightDirectory = Path.Combine(currentTreeDirectory, "r");
+        if (Directory.Exists(rightDirectory))
         {
-            TempWriter?.Dispose();
-            TempFileStream?.Dispose();
+            GoThroughTreeWithTempWriter(context, rightDirectory);
         }
+    }
 
-
-        public void Dispose()
-        {
-            DisposeTempStream();
-        }
-
-
-        public string TempFileName { get; set; }
-
-        private FileStream TempFileStream { get; set; }
-
-        public StreamWriter Writer { get; set; }
-
-        public StreamWriter TempWriter { get; set; }
-
-        public string PrevValue { get; set; }
+    static string[] Parse(string input)
+    {
+        return input.Split(". ");
     }
 }
