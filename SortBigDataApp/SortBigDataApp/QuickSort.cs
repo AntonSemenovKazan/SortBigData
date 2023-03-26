@@ -2,6 +2,8 @@
 
 namespace SortBigDataApp
 {
+
+
     public class QuickSort<TPivotItem>
     {
         public QuickSort(string fileName, Func<string, TPivotItem> getPivotItem, Func<string, TPivotItem, bool> compareFunc, string startTreeDirectory)
