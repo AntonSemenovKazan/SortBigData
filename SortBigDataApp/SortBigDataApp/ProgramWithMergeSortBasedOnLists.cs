@@ -2,13 +2,12 @@
 using SortBigDataApp;
 using System.Diagnostics;
 
-internal class Program
+internal class ProgramWithMergeSortBasedOnLists
 {
 
-    const int BufferSize = 1024 * 1024;
-    //const int BufferSize = 10;
+    const int InMemoryBytesMax = 1024 * 1024 * 100;
 
-    static void Main(string[] args)
+    static void Solve(string[] args)
     {
         IConfiguration Configuration = new ConfigurationBuilder()
             .AddJsonFile("appsettings.json")
@@ -19,30 +18,30 @@ internal class Program
 
         var fullSw = Stopwatch.StartNew();
         var sw = Stopwatch.StartNew();
-        var buffer = new Entity[BufferSize];
+        var inMemoryQueue = new Queue<List<Entity>>();
         var fileNamesQueue = new Queue<string>();
-        var bufferIndex = 0;
+        var readBytesNumber = 0;
         using (StreamReader reader = new StreamReader(fileName))
         {
             string line = null;
             while ((line = reader.ReadLine()) != null)
             {
-                buffer[bufferIndex] = new Entity(line);
-                bufferIndex++;
+                inMemoryQueue.Enqueue(new List<Entity>() { new Entity(line) });
+                readBytesNumber += line.Length;
 
-                if (bufferIndex >= BufferSize)
+                if (readBytesNumber > InMemoryBytesMax)
                 {
-                    var tempFullFileName = SortInMemoryAndWriteToFile(sw, parentDirectory, buffer, bufferIndex);
-                    fileNamesQueue.Enqueue(tempFullFileName);
+                    readBytesNumber = 0;
 
-                    bufferIndex = 0;
+                    var tempFullFileName = SortInMemoryAndWriteToFile(sw, parentDirectory, inMemoryQueue);
+                    fileNamesQueue.Enqueue(tempFullFileName);
                 }
             }
         }
 
-        if (bufferIndex > 0)
+        if (inMemoryQueue.Count > 0)
         {
-            var tempFullFileName = SortInMemoryAndWriteToFile(sw, parentDirectory, buffer, bufferIndex);
+            var tempFullFileName = SortInMemoryAndWriteToFile(sw, parentDirectory, inMemoryQueue);
             fileNamesQueue.Enqueue(tempFullFileName);
         }
 
@@ -68,25 +67,26 @@ internal class Program
         Console.WriteLine($"Sorted result in {resultFileName}");
     }
 
-    private static string SortInMemoryAndWriteToFile(Stopwatch sw, string parentDirectory, Entity[] buffer, int bufferIndex)
+    private static string SortInMemoryAndWriteToFile(Stopwatch sw, string parentDirectory, Queue<List<Entity>> inMemoryQueue)
     {
         Console.WriteLine($"Read all data for {sw.Elapsed}");
         sw.Restart();
 
-        var sort = new ArrayInMemoryMergeSort();
-        var right = bufferIndex - 1;
-        var result = sort.SortArray(buffer, 0, right);
+        var sort = new InMemoryMergeSort();
+        sort.Sort(inMemoryQueue);
 
         Console.WriteLine($"Sort all data for {sw.Elapsed}");
         sw.Restart();
+
+        var result = inMemoryQueue.Dequeue();
 
         var resultFileName = Guid.NewGuid().ToString();
         var outputPath = Path.Combine(parentDirectory, resultFileName);
         using (StreamWriter writer = new StreamWriter(outputPath))
         {
-            for (var i = 0; i <= right; i++)
+            foreach (var entity in result)
             {
-                writer.WriteLine($"{result[i].NumberPart}. {result[i].StringPart}");
+                writer.WriteLine($"{entity.NumberPart}. {entity.StringPart}");
             }
         }
 

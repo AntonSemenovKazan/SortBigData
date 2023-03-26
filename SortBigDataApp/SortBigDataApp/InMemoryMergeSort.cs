@@ -9,7 +9,7 @@
                 var left = queue.Dequeue();
                 var right = queue.Dequeue();
 
-                var result = new List<Entity>();
+                var result = new List<Entity>(left.Count + right.Count);
 
                 var leftEnumerator = left.GetEnumerator();
                 var rightEnumerator = right.GetEnumerator();
