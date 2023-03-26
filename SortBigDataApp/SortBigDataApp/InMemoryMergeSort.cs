@@ -18,7 +18,7 @@
                 var rightHasItems = rightEnumerator.MoveNext();
                 while (leftHasItems && rightHasItems)
                 {
-                    if (IsLessOrEqual(leftEnumerator.Current, rightEnumerator.Current))
+                    if (Entity.IsLessOrEqual(leftEnumerator.Current, rightEnumerator.Current))
                     {
                         result.Add(leftEnumerator.Current);
                         leftHasItems = leftEnumerator.MoveNext();
@@ -44,17 +44,6 @@
 
                 queue.Enqueue(result);
             }
-        }
-
-        private static bool IsLessOrEqual(Entity first, Entity second)
-        {
-            var compareResult = string.Compare(first.StringPart, second.StringPart);
-            if (compareResult == 0)
-            {
-                return first.NumberPart <= second.NumberPart;
-            }
-
-            return compareResult < 0;
         }
     }
 }

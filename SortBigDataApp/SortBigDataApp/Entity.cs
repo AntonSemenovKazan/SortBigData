@@ -13,5 +13,16 @@
         public int NumberPart { get; }
 
         public string StringPart { get; }
+
+        public static bool IsLessOrEqual(Entity first, Entity second)
+        {
+            var compareResult = string.Compare(first.StringPart, second.StringPart, StringComparison.Ordinal);
+            if (compareResult == 0)
+            {
+                return first.NumberPart <= second.NumberPart;
+            }
+
+            return compareResult < 0;
+        }
     }
 }

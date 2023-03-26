@@ -28,7 +28,7 @@
 
                     while (leftLine != null && rightLine != null)
                     {
-                        if (IsLessOrEqual(leftEntity, rightEntity))
+                        if (Entity.IsLessOrEqual(leftEntity, rightEntity))
                         {
                             resultFileWriter.WriteLine(leftLine);
                             leftLine = leftFileReader.ReadLine();
@@ -75,17 +75,6 @@
             }
 
             return new Entity(line);
-        }
-
-        private static bool IsLessOrEqual(Entity first, Entity second)
-        {
-            var compareResult = string.Compare(first.StringPart, second.StringPart);
-            if (compareResult == 0)
-            {
-                return first.NumberPart <= second.NumberPart;
-            }
-
-            return compareResult < 0;
         }
     }
 }

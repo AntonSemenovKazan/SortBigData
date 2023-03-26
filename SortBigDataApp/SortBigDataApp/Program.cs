@@ -5,7 +5,7 @@ using System.Diagnostics;
 internal class Program
 {
 
-    const int InMemoryBytesMax = 1024 * 1024 * 1024;
+    const int InMemoryBytesMax = 1024 * 1024 * 100;
 
     static void Main(string[] args)
     {
