@@ -1,6 +1,6 @@
-﻿using SortBigDataApp;
+﻿using SortBigDataApp.Implementations;
 
-public class ArrayInMemoryMergeSort
+public class InMemoryMergeSort
 {
     public Entity[] SortArray(Entity[] array, int left, int right)
     {
@@ -14,7 +14,7 @@ public class ArrayInMemoryMergeSort
         return array;
     }
 
-    public void MergeArray(Entity[] array, int left, int middle, int right)
+    private void MergeArray(Entity[] array, int left, int middle, int right)
     {
         var leftArrayLength = middle - left + 1;
         var rightArrayLength = right - middle;

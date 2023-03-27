@@ -13,7 +13,6 @@ namespace GenerateBigDataApp.Implementations
             DuplicateChanceInPercents = int.Parse(configuration["Settings:DuplicateChanceInPercents"]);
             GeneratedStringsNumber = int.Parse(configuration["Settings:GeneratedStringsNumber"]);
             GeneratedFileName = configuration["Settings:GeneratedFileName"];
-
         }
 
         public int MaxNumber { get; }

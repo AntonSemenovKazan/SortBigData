@@ -1,31 +1,44 @@
-﻿using System.Text;
+﻿using Microsoft.Extensions.Configuration;
+using System.Collections.Concurrent;
+using System.Text;
 
-namespace SortBigDataApp
+namespace SortBigDataApp.Implementations
 {
-    public class InFilesMergeSort
+    public class ConcurrentInFilesMergeSort : IInMemorySort
     {
-        public string Sort(Queue<string> queue, int maxConcurrency)
-        {
-            var semaphore = new SemaphoreSlim(maxConcurrency);
+        private const int WriteBufferInBytes = 65000;
 
+        private readonly ICollection<string> initialFiles;
+        private readonly int maxConcurrency;
+
+        public ConcurrentInFilesMergeSort(ICollection<string> initialFiles, IConfiguration configuration)
+        {
+            this.initialFiles = initialFiles;
+            maxConcurrency = int.Parse(configuration["Settings:InFilesConcurrencyNumber"]);
+        }
+
+        public ICollection<string> Sort()
+        {
+            var queue = new ConcurrentQueue<string>(initialFiles);
+
+            var semaphore = new SemaphoreSlim(maxConcurrency);
             var resultIsFound = queue.Count <= 1;
             while (!resultIsFound)
             {
-                var nextIterationQueue = new Queue<string>();
+                var nextIterationQueue = new ConcurrentQueue<string>();
                 var tasks = new List<Task>();
+                Console.WriteLine($"Sort in {queue.Count} files started...");
                 while (queue.Count > 1)
                 {
-                    var leftFileName = queue.Dequeue();
-                    var rightFileName = queue.Dequeue();
+                    queue.TryDequeue(out var leftFileName);
+                    queue.TryDequeue(out var rightFileName);
 
                     semaphore.Wait();
 
-                    var t = Task.Factory.StartNew(() =>
+                    var enqueuedTask = Task.Factory.StartNew(() =>
                     {
                         try
                         {
-
-
                             var resultFileName = Guid.NewGuid().ToString();
                             var fullResultFileName = Path.Combine(Path.GetDirectoryName(leftFileName), resultFileName);
 
@@ -35,7 +48,7 @@ namespace SortBigDataApp
                             {
                                 leftFileReader = new StreamReader(leftFileName);
                                 rightFileReader = new StreamReader(rightFileName);
-                                resultFileWriter = new StreamWriter(fullResultFileName, false, Encoding.UTF8, 65000);
+                                resultFileWriter = new StreamWriter(fullResultFileName, false, Encoding.UTF8, WriteBufferInBytes);
 
                                 var leftLine = leftFileReader.ReadLine();
                                 var leftEntity = ConvertToEntityOrNull(leftLine);
@@ -88,7 +101,7 @@ namespace SortBigDataApp
                         }
                     });
 
-                    tasks.Add(t);
+                    tasks.Add(enqueuedTask);
                 }
 
                 Task.WaitAll(tasks.ToArray());
@@ -99,13 +112,21 @@ namespace SortBigDataApp
                 }
                 else if (queue.Count == 1)
                 {
-                    nextIterationQueue.Enqueue(queue.Dequeue());
+                    queue.TryDequeue(out var lastFile);
+                    nextIterationQueue.Enqueue(lastFile);
                 }
                 resultIsFound = nextIterationQueue.Count <= 1;
+                if (nextIterationQueue.Contains(null))
+                {
+                    throw new Exception();
+                }
                 queue = nextIterationQueue;
             }
 
-            return queue.Dequeue();
+            queue.TryDequeue(out var result);
+            return new List<string>() {
+                result
+            };
         }
 
         private static Entity ConvertToEntityOrNull(string line)
@@ -117,5 +138,6 @@ namespace SortBigDataApp
 
             return new Entity(line);
         }
+
     }
 }

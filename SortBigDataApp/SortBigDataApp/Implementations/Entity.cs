@@ -1,8 +1,7 @@
-﻿namespace SortBigDataApp
+﻿namespace SortBigDataApp.Implementations
 {
     public class Entity
     {
-
         public Entity(string source)
         {
             var parsed = source.Split(". ");
