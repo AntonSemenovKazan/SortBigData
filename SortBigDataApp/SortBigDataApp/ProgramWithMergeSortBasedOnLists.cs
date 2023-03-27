@@ -51,7 +51,7 @@ internal class ProgramWithMergeSortBasedOnLists
         Console.WriteLine($"Files number = {fileNamesQueue.Count}");
 
         var inFileMergeSort = new InFilesMergeSort();
-        inFileMergeSort.Sort(fileNamesQueue);
+        inFileMergeSort.Sort(fileNamesQueue, 10);
 
         Console.WriteLine($"In files sort took {fullSw.Elapsed}");
         fullSw.Restart();

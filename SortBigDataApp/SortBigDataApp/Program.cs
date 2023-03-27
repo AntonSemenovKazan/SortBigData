@@ -1,12 +1,13 @@
 ﻿using Microsoft.Extensions.Configuration;
 using SortBigDataApp;
 using System.Diagnostics;
+using System.Text;
 
 internal class Program
 {
 
-    const int BufferSize = 1024 * 1024;
-    //const int BufferSize = 10;
+    const int BufferSize = 1000 * 1000 * 5;
+    //const int BufferSize = 100;
 
     static void Main(string[] args)
     {
@@ -22,6 +23,10 @@ internal class Program
         var buffer = new Entity[BufferSize];
         var fileNamesQueue = new Queue<string>();
         var bufferIndex = 0;
+
+        int maxConcurrency = 10;
+        List<Task> tasks = new List<Task>();
+        var concurrencySemaphore = new SemaphoreSlim(maxConcurrency);
         using (StreamReader reader = new StreamReader(fileName))
         {
             string line = null;
@@ -32,10 +37,27 @@ internal class Program
 
                 if (bufferIndex >= BufferSize)
                 {
-                    var tempFullFileName = SortInMemoryAndWriteToFile(sw, parentDirectory, buffer, bufferIndex);
-                    fileNamesQueue.Enqueue(tempFullFileName);
+                    concurrencySemaphore.Wait();
+
+                    var bufferCopy = buffer;
+                    var bufferIndexCopy = bufferIndex;
+                    var t = Task.Factory.StartNew(() =>
+                    {
+                        try
+                        {
+                            var tempFullFileName = SortInMemoryAndWriteToFile(sw, parentDirectory, bufferCopy, bufferIndexCopy);
+                            fileNamesQueue.Enqueue(tempFullFileName);
+                        }
+                        finally
+                        {
+                            concurrencySemaphore.Release();
+                        }
+                    });
+
+                    tasks.Add(t);
 
                     bufferIndex = 0;
+                    buffer = new Entity[BufferSize];
                 }
             }
         }
@@ -46,18 +68,19 @@ internal class Program
             fileNamesQueue.Enqueue(tempFullFileName);
         }
 
+        Task.WaitAll(tasks.ToArray());
+
         Console.WriteLine($"Full read and in memory sort and print took {fullSw.Elapsed}");
         fullSw.Restart();
 
         Console.WriteLine($"Files number = {fileNamesQueue.Count}");
 
         var inFileMergeSort = new InFilesMergeSort();
-        inFileMergeSort.Sort(fileNamesQueue);
+        var resultFileName = inFileMergeSort.Sort(fileNamesQueue, 10);
 
         Console.WriteLine($"In files sort took {fullSw.Elapsed}");
         fullSw.Restart();
 
-        var resultFileName = fileNamesQueue.Dequeue();
         var outputPath = Path.Combine(parentDirectory, "output.txt");
         if (File.Exists(outputPath))
         {
@@ -82,7 +105,7 @@ internal class Program
 
         var resultFileName = Guid.NewGuid().ToString();
         var outputPath = Path.Combine(parentDirectory, resultFileName);
-        using (StreamWriter writer = new StreamWriter(outputPath))
+        using (StreamWriter writer = new StreamWriter(outputPath, false, Encoding.UTF8, 65000))
         {
             for (var i = 0; i <= right; i++)
             {
